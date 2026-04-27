@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "duppler"
+version = "0.1.0"
+description = "Duplicate photo and video finder"
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow>=10.0",
+    "imagehash>=4.3",
+    "send2trash>=1.8",
+]
+
+[project.scripts]
+duppler = "duppler.app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
