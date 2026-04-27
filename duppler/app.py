@@ -3,6 +3,7 @@
 import sys
 import os
 import json
+import subprocess
 import threading
 import queue
 import tkinter as tk
@@ -60,6 +61,51 @@ def _check_deps() -> None:
 
 
 _check_deps()
+
+
+# ── tooltip ──────────────────────────────────────────────────────────────────
+
+class Tooltip:
+    """Shows a tooltip after 900 ms of hovering over a widget."""
+
+    def __init__(self, widget: tk.Widget, text: str):
+        self._widget = widget
+        self._text   = text
+        self._win    = None
+        self._job    = None
+        widget.bind('<Enter>',    self._on_enter, add='+')
+        widget.bind('<Leave>',    self._on_leave, add='+')
+        widget.bind('<Button>',   self._on_leave, add='+')
+
+    def _on_enter(self, _event) -> None:
+        self._job = self._widget.after(900, self._show)
+
+    def _on_leave(self, _event) -> None:
+        if self._job:
+            self._widget.after_cancel(self._job)
+            self._job = None
+        self._hide()
+
+    def _show(self) -> None:
+        if self._win:
+            return
+        x = self._widget.winfo_rootx() + 10
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        self._win = tw = tk.Toplevel(self._widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f'+{x}+{y}')
+        tk.Label(
+            tw, text=self._text, justify='left',
+            bg='#ffffdd', fg='#222222',
+            font=('Segoe UI', 8),
+            relief='solid', bd=1,
+            padx=6, pady=4,
+        ).pack()
+
+    def _hide(self) -> None:
+        if self._win:
+            self._win.destroy()
+            self._win = None
 
 
 # ── constants ─────────────────────────────────────────────────────────────────
@@ -212,17 +258,36 @@ class PairRow(tk.Frame):
                  wraplength=240, justify='left').pack(anchor='w')
         tk.Label(card, text=_fmt_size(fi.size), bg=bg, anchor='w',
                  font=('Segoe UI', 8), fg='#555555').pack(anchor='w')
-        tk.Label(card, text=_short_path(fi.path), bg=bg, anchor='w',
-                 font=('Segoe UI', 7), fg='#999999').pack(anchor='w', pady=(1, 6))
+        short = _short_path(fi.path)
+        path_lbl = tk.Label(card, text=short, bg=bg, anchor='w',
+                            font=('Segoe UI', 7), fg='#999999')
+        path_lbl.pack(anchor='w', pady=(1, 6))
+        if short != fi.path:
+            Tooltip(path_lbl, fi.path)
+
+        btn_row = tk.Frame(card, bg=bg)
+        btn_row.pack(anchor='w', pady=(0, 2))
 
         tk.Button(
-            card, text=t('delete'), command=on_del,
+            btn_row, text=t('delete'), command=on_del,
             bg=DEL_BG, fg=DEL_FG,
             activebackground=DEL_ACT, activeforeground=DEL_FG,
             font=('Segoe UI', 8, 'bold'),
             relief='flat', cursor='hand2', bd=0,
             padx=10, pady=4,
-        ).pack(anchor='w')
+        ).pack(side='left')
+
+        tk.Button(
+            btn_row, text=t('show_in_explorer'),
+            command=lambda p=fi.path: subprocess.run(
+                ['explorer', '/select,', os.path.normpath(p)]
+            ),
+            bg=bg, fg='#336699',
+            activebackground=bg, activeforeground='#1a4a8a',
+            font=('Segoe UI', 8, 'underline'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=8, pady=4,
+        ).pack(side='left')
 
         return thumb_lbl
 
@@ -265,10 +330,32 @@ class ResultsPanel(ttk.Frame):
         self._build()
 
     def _build(self) -> None:
-        hdr = ttk.Frame(self)
-        hdr.pack(side='top', fill='x', padx=10, pady=(6, 2))
-        self._count_lbl = ttk.Label(hdr, text='', font=('Segoe UI', 9))
+        self._hdr = ttk.Frame(self)
+        self._hdr.pack(side='top', fill='x', padx=10, pady=(6, 2))
+        self._count_lbl = ttk.Label(self._hdr, text='', font=('Segoe UI', 9))
         self._count_lbl.pack(side='left')
+
+        self._del_bar = tk.Frame(self, bg=self.winfo_toplevel().cget('bg'))
+        self._del_bar.columnconfigure(0, weight=1, uniform='dcol')
+        self._del_bar.columnconfigure(1, weight=1, uniform='dcol')
+        self._del_a_btn = tk.Button(
+            self._del_bar, text=t('del_all_a'), command=lambda: self._delete_all('a'),
+            bg=CARD_A_HEADER, fg='white',
+            activebackground='#1e4d80', activeforeground='white',
+            font=('Segoe UI', 8, 'bold'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=10, pady=5,
+        )
+        self._del_a_btn.grid(row=0, column=0, sticky='ew', padx=(10, 4), pady=(0, 4))
+        self._del_b_btn = tk.Button(
+            self._del_bar, text=t('del_all_b'), command=lambda: self._delete_all('b'),
+            bg=CARD_B_HEADER, fg='white',
+            activebackground='#7a5228', activeforeground='white',
+            font=('Segoe UI', 8, 'bold'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=10, pady=5,
+        )
+        self._del_b_btn.grid(row=0, column=1, sticky='ew', padx=(4, 10), pady=(0, 4))
 
         body = ttk.Frame(self)
         body.pack(fill='both', expand=True)
@@ -337,6 +424,45 @@ class ResultsPanel(ttk.Frame):
         self._rows.clear()
         for pair in self._all_pairs[:shown]:
             self._render_one(pair)
+        self._del_a_btn.config(text=t('del_all_a'))
+        self._del_b_btn.config(text=t('del_all_b'))
+        self._refresh()
+
+    def _delete_all(self, which: str) -> None:
+        paths = list(dict.fromkeys(
+            p.file_a.path if which == 'a' else p.file_b.path
+            for p in self._all_pairs
+            if os.path.exists(p.file_a.path if which == 'a' else p.file_b.path)
+        ))
+        if not paths:
+            return
+        label = 'A' if which == 'a' else 'B'
+        if not messagebox.askyesno(
+            t('dlg_del_all_title'),
+            t('dlg_del_all_msg', n=len(paths), which=label),
+        ):
+            return
+        errors = []
+        for path in paths:
+            try:
+                recycler.send_to_trash(path)
+            except Exception as exc:
+                errors.append(f'{path}\n{exc}')
+        if errors:
+            messagebox.showerror(t('dlg_err_title'), '\n\n'.join(errors[:5]))
+        # Remove pairs whose deleted-side file was in our list
+        path_set = set(paths)
+        surviving = [
+            p for p in self._all_pairs
+            if (p.file_a.path if which == 'a' else p.file_b.path) not in path_set
+        ]
+        self._all_pairs[:] = surviving
+        self._load_btn.pack_forget()
+        for row in self._rows:
+            row.destroy()
+        self._rows.clear()
+        for pair in self._all_pairs[:PAGE_SIZE]:
+            self._render_one(pair)
         self._refresh()
 
     # ── internals ─────────────────────────────────────────────────
@@ -384,10 +510,13 @@ class ResultsPanel(ttk.Frame):
 
         if total == 0:
             self._count_lbl.config(text=t('no_dupes'))
-        elif unseen > 0:
-            self._count_lbl.config(text=t('shown_of', shown=shown, total=total))
+            self._del_bar.pack_forget()
         else:
-            self._count_lbl.config(text=t('dupes_count', n=total))
+            if unseen > 0:
+                self._count_lbl.config(text=t('shown_of', shown=shown, total=total))
+            else:
+                self._count_lbl.config(text=t('dupes_count', n=total))
+            self._del_bar.pack(fill='x', after=self._hdr)
 
         self._load_btn.pack_forget()
         if unseen > 0 and self._scan_done:
@@ -453,6 +582,12 @@ class App:
         )
         self._radio_perc.pack(side='left', padx=(0, 14))
 
+        self._recursive = tk.BooleanVar(value=False)
+        self._recursive_chk = ttk.Checkbutton(
+            row2, text=t('recursive_check'), variable=self._recursive,
+        )
+        self._recursive_chk.pack(side='left', padx=(0, 14))
+
         self._scan_btn = ttk.Button(row2, text=t('find_btn'), command=self._toggle_scan)
         self._scan_btn.pack(side='right')
 
@@ -499,6 +634,7 @@ class App:
         self._method_lbl.config(text=t('method_label'))
         self._radio_exact.config(text=t('exact_radio'))
         self._radio_perc.config(text=t('perceptual_radio'))
+        self._recursive_chk.config(text=t('recursive_check'))
         if not self._scanning:
             self._scan_btn.config(text=t('find_btn'))
         self._results.rebuild_rows()
@@ -542,6 +678,8 @@ class App:
         self._cancel.clear()
         self._scanning = True
         self._scan_btn.config(text=t('cancel_btn'))
+        self._btn_en.config(state='disabled')
+        self._btn_ru.config(state='disabled')
         self._progress.config(value=0)
         self._status_lbl.config(text='')
         self._results.set_header(t('scanning'))
@@ -551,6 +689,7 @@ class App:
             args=(a, b, self._strategy.get(),
                   self._cb_progress, self._cb_result, self._cb_done,
                   self._cancel),
+            kwargs={'recursive': self._recursive.get()},
             daemon=True,
         ).start()
 
@@ -583,6 +722,9 @@ class App:
                     count = msg[1]
                     self._scanning = False
                     self._scan_btn.config(text=t('find_btn'), state='normal')
+                    self._btn_en.config(state='normal')
+                    self._btn_ru.config(state='normal')
+                    self._update_lang_btns()
                     self._progress.config(value=100 if count else 0)
                     self._results.mark_scan_done()
                     if count == 0:

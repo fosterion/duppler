@@ -13,6 +13,7 @@ STRINGS: dict = {
         'perceptual_radio':  'Визуальное сходство для фото, точный для видео (медленнее)',
         'find_btn':          'Найти дубликаты',
         'cancel_btn':        'Отменить',
+        'recursive_check':   'Включая подпапки',
         # results panel
         'scanning':          'Сканирование…',
         'no_dupes':          'Дубликатов не найдено',
@@ -21,12 +22,17 @@ STRINGS: dict = {
         'load_more_btn':     '  Показать ещё {next_n}  (осталось {rem})  ',
         'done_none':         'Готово — дубликатов нет',
         'done_found':        'Готово — {n} пар',
+        'del_all_a':         'Удалить все из A',
+        'del_all_b':         'Удалить все из B',
+        'dlg_del_all_title': 'Подтверждение',
+        'dlg_del_all_msg':   'Переместить {n} файлов из Папки {which} в корзину?',
         # pair row
         'badge_exact':       '  ✓  точное совпадение  ',
         'badge_perceptual':  '  ≈  визуально похожи  (расстояние {d})  ',
         'card_a_header':     'ПАПКА  A',
         'card_b_header':     'ПАПКА  B',
         'delete':            'Удалить',
+        'show_in_explorer':  'Показать в проводнике',
         # dialogs
         'dlg_pick_title':    'Выбери папки',
         'dlg_pick_msg':      'Укажи обе папки для сравнения.',
@@ -50,6 +56,7 @@ STRINGS: dict = {
         'perceptual_radio':  'Visual similarity for photos, exact for video (slower)',
         'find_btn':          'Find duplicates',
         'cancel_btn':        'Cancel',
+        'recursive_check':   'Include subfolders',
         # results panel
         'scanning':          'Scanning…',
         'no_dupes':          'No duplicates found',
@@ -58,12 +65,17 @@ STRINGS: dict = {
         'load_more_btn':     '  Show {next_n} more  ({rem} remaining)  ',
         'done_none':         'Done — no duplicates',
         'done_found':        'Done — {n} pairs',
+        'del_all_a':         'Delete all from A',
+        'del_all_b':         'Delete all from B',
+        'dlg_del_all_title': 'Confirm',
+        'dlg_del_all_msg':   'Move {n} files from Folder {which} to Recycle Bin?',
         # pair row
         'badge_exact':       '  ✓  exact match  ',
         'badge_perceptual':  '  ≈  visually similar  (distance {d})  ',
         'card_a_header':     'FOLDER  A',
         'card_b_header':     'FOLDER  B',
         'delete':            'Delete',
+        'show_in_explorer':  'Show in Explorer',
         # dialogs
         'dlg_pick_title':    'Select folders',
         'dlg_pick_msg':      'Please select both folders.',

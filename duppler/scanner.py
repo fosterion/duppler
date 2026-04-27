@@ -34,12 +34,22 @@ class DuplicatePair:
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _collect(folder: str) -> List[FileInfo]:
+def _collect(folder: str, recursive: bool = False) -> List[FileInfo]:
     result = []
-    for name in os.listdir(folder):
+    if recursive:
+        entries = (
+            (os.path.join(root, name), name)
+            for root, _dirs, files in os.walk(folder)
+            for name in files
+        )
+    else:
+        entries = (
+            (os.path.join(folder, name), name)
+            for name in os.listdir(folder)
+        )
+    for path, name in entries:
         ext = os.path.splitext(name)[1].lower()
         if ext in SUPPORTED_EXTENSIONS:
-            path = os.path.join(folder, name)
             try:
                 size = os.path.getsize(path)
                 result.append(FileInfo(path=path, name=name, size=size, ext=ext))
@@ -207,9 +217,10 @@ def scan(
     result_cb: Callable[[DuplicatePair], None],
     done_cb: Callable[[int], None],                 # (total_found)
     cancel: threading.Event,
+    recursive: bool = False,
 ) -> None:
-    files_a = _collect(folder_a)
-    files_b = _collect(folder_b)
+    files_a = _collect(folder_a, recursive)
+    files_b = _collect(folder_b, recursive)
     total = len(files_a) + len(files_b)
 
     progress_cb(0, total, f'Файлов: {len(files_a)} + {len(files_b)}')
