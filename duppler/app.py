@@ -15,10 +15,9 @@ from . import scanner, recycler
 
 # ── prefs ─────────────────────────────────────────────────────────────────────
 
-# prefs.json lives at the repo root (one level above the package directory)
 _PREFS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'prefs.json',
+    os.environ.get('APPDATA', os.path.expanduser('~')),
+    'Duppler', 'prefs.json',
 )
 
 
@@ -32,6 +31,7 @@ def _load_prefs() -> dict:
 
 def _save_prefs(data: dict) -> None:
     try:
+        os.makedirs(os.path.dirname(_PREFS_FILE), exist_ok=True)
         with open(_PREFS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
@@ -52,6 +52,10 @@ def _check_deps() -> None:
         from PIL import Image  # noqa: F401
     except ImportError:
         missing.append('Pillow')
+    try:
+        import imagehash  # noqa: F401
+    except ImportError:
+        missing.append('imagehash')
 
     if missing:
         root = tk.Tk()
@@ -111,6 +115,7 @@ class Tooltip:
 # ── constants ─────────────────────────────────────────────────────────────────
 
 THUMB_W, THUMB_H = 110, 110
+THUMB_S         = 48     # small thumbnail for single-folder group rows
 PAGE_SIZE = 100
 
 BG_EVEN = '#f7f7f7'
@@ -335,36 +340,51 @@ class ResultsPanel(ttk.Frame):
         self._count_lbl = ttk.Label(self._hdr, text='', font=('Segoe UI', 9))
         self._count_lbl.pack(side='left')
 
-        self._del_bar = tk.Frame(self, bg=self.winfo_toplevel().cget('bg'))
-        self._del_bar.columnconfigure(0, weight=1, uniform='dcol')
-        self._del_bar.columnconfigure(1, weight=1, uniform='dcol')
-        self._del_a_btn = tk.Button(
-            self._del_bar, text=t('del_all_a'), command=lambda: self._delete_all('a'),
-            bg=CARD_A_HEADER, fg='white',
-            activebackground='#1e4d80', activeforeground='white',
-            font=('Segoe UI', 8, 'bold'),
-            relief='flat', cursor='hand2', bd=0,
-            padx=10, pady=5,
-        )
-        self._del_a_btn.grid(row=0, column=0, sticky='ew', padx=(10, 4), pady=(0, 4))
-        self._del_b_btn = tk.Button(
-            self._del_bar, text=t('del_all_b'), command=lambda: self._delete_all('b'),
-            bg=CARD_B_HEADER, fg='white',
-            activebackground='#7a5228', activeforeground='white',
-            font=('Segoe UI', 8, 'bold'),
-            relief='flat', cursor='hand2', bd=0,
-            padx=10, pady=5,
-        )
-        self._del_b_btn.grid(row=0, column=1, sticky='ew', padx=(4, 10), pady=(0, 4))
-
         body = ttk.Frame(self)
         body.pack(fill='both', expand=True)
 
-        self._canvas = tk.Canvas(body, highlightthickness=0, bg=BG_ODD)
-        sb = ttk.Scrollbar(body, orient='vertical', command=self._canvas.yview)
-        self._canvas.configure(yscrollcommand=sb.set)
+        # Scrollbar sits at the right edge of body, spanning full height
+        # (including the del_bar). This keeps del_bar and canvas the same width.
+        sb = ttk.Scrollbar(body, orient='vertical')
         sb.pack(side='right', fill='y')
-        self._canvas.pack(side='left', fill='both', expand=True)
+
+        content = ttk.Frame(body)
+        content.pack(side='left', fill='both', expand=True)
+
+        self._del_bar = tk.Frame(content, bg=self.winfo_toplevel().cget('bg'))
+        self._del_bar.columnconfigure(0, weight=1, uniform='dcol')
+        self._del_bar.columnconfigure(1, weight=1, uniform='dcol')
+
+        _RED_STRIPE = '#c0392b'
+
+        _wrap_a = tk.Frame(self._del_bar, bg=_RED_STRIPE)
+        _wrap_a.grid(row=0, column=0, sticky='ew', padx=(6, 4), pady=(0, 4))
+        self._del_a_btn = tk.Button(
+            _wrap_a, text=t('del_all_a'), command=lambda: self._delete_all('a'),
+            bg=CARD_A_BG, fg=CARD_A_HEADER,
+            activebackground=CARD_A_BORDER, activeforeground=CARD_A_HEADER,
+            font=('Segoe UI', 8, 'bold'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=10, pady=5,
+        )
+        self._del_a_btn.pack(fill='both', padx=(10, 0), pady=0)
+
+        _wrap_b = tk.Frame(self._del_bar, bg=_RED_STRIPE)
+        _wrap_b.grid(row=0, column=1, sticky='ew', padx=(4, 6), pady=(0, 4))
+        self._del_b_btn = tk.Button(
+            _wrap_b, text=t('del_all_b'), command=lambda: self._delete_all('b'),
+            bg=CARD_B_BG, fg=CARD_B_HEADER,
+            activebackground=CARD_B_BORDER, activeforeground=CARD_B_HEADER,
+            font=('Segoe UI', 8, 'bold'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=10, pady=5,
+        )
+        self._del_b_btn.pack(fill='both', padx=(10, 0), pady=0)
+
+        self._canvas = tk.Canvas(content, highlightthickness=0, bg=BG_ODD)
+        sb.configure(command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=sb.set)
+        self._canvas.pack(side='top', fill='both', expand=True)
 
         self._inner = tk.Frame(self._canvas, bg=BG_ODD)
         self._win = self._canvas.create_window((0, 0), window=self._inner, anchor='nw')
@@ -516,7 +536,268 @@ class ResultsPanel(ttk.Frame):
                 self._count_lbl.config(text=t('shown_of', shown=shown, total=total))
             else:
                 self._count_lbl.config(text=t('dupes_count', n=total))
-            self._del_bar.pack(fill='x', after=self._hdr)
+            self._del_bar.pack(fill='x', before=self._canvas)
+
+        self._load_btn.pack_forget()
+        if unseen > 0 and self._scan_done:
+            next_n = min(unseen, PAGE_SIZE)
+            self._load_btn.config(text=t('load_more_btn', next_n=next_n, rem=unseen))
+            self._load_btn.pack(pady=12)
+
+
+# ── App ───────────────────────────────────────────────────────────────────────
+
+# ── GroupRow ──────────────────────────────────────────────────────────────────
+
+class GroupRow(tk.Frame):
+    def __init__(self, parent, group: scanner.DuplicateGroup,
+                 index: int, on_delete, **kw):
+        bg = BG_EVEN if index % 2 == 0 else BG_ODD
+        super().__init__(parent, bg=bg, **kw)
+        self.group = group
+        self._img_refs: list  = []
+        self._file_frames: dict = {}   # path -> frame
+        self._on_delete = on_delete    # (group_row, FileInfo) -> None
+
+        n = len(group.files)
+        if group.match_type == 'exact':
+            badge_txt = t('badge_exact') + '  ' + t('group_files', n=n)
+            badge_clr = BADGE_EXACT
+        else:
+            badge_txt = (t('badge_perceptual', d=group.phash_distance)
+                         + '  ' + t('group_files', n=n))
+            badge_clr = BADGE_PERC
+
+        tk.Label(self, text=badge_txt, bg=badge_clr, fg='white',
+                 font=('Segoe UI', 7), anchor='w').pack(fill='x', side='top')
+
+        self._body = tk.Frame(self, bg=bg)
+        self._body.pack(fill='x', side='top', padx=6, pady=(4, 6))
+
+        for fi in list(group.files):
+            self._add_file_row(fi, bg)
+
+    def _add_file_row(self, fi: scanner.FileInfo, bg: str) -> None:
+        row = tk.Frame(self._body, bg=bg, pady=3)
+        row.pack(fill='x')
+        self._file_frames[fi.path] = row
+
+        # thumbnail
+        pb = tk.Frame(row, bg='#bbbbbb', padx=1, pady=1)
+        pb.pack(side='left', padx=(0, 10))
+        pbg = tk.Frame(pb, bg='white', width=THUMB_S, height=THUMB_S)
+        pbg.pack()
+        pbg.pack_propagate(False)
+        thumb_lbl = tk.Label(pbg, bg='white', anchor='center')
+        thumb_lbl.place(relx=0.5, rely=0.5, anchor='center')
+
+        # buttons (packed before info so they stay pinned to the right)
+        btn_frame = tk.Frame(row, bg=bg)
+        btn_frame.pack(side='right', padx=(8, 0))
+        tk.Button(
+            btn_frame, text=t('delete'),
+            command=lambda f=fi: self._on_delete(self, f),
+            bg=DEL_BG, fg=DEL_FG,
+            activebackground=DEL_ACT, activeforeground=DEL_FG,
+            font=('Segoe UI', 8, 'bold'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=10, pady=3,
+        ).pack(pady=(0, 2))
+        tk.Button(
+            btn_frame, text=t('show_in_explorer'),
+            command=lambda p=fi.path: subprocess.run(
+                ['explorer', '/select,', os.path.normpath(p)]
+            ),
+            bg=bg, fg='#336699',
+            activebackground=bg, activeforeground='#1a4a8a',
+            font=('Segoe UI', 8, 'underline'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=4, pady=2,
+        ).pack()
+
+        # info
+        info = tk.Frame(row, bg=bg)
+        info.pack(side='left', fill='x', expand=True)
+        tk.Label(info, text=fi.name, bg=bg, anchor='w',
+                 font=('Segoe UI', 9, 'bold'),
+                 wraplength=300, justify='left').pack(anchor='w')
+        tk.Label(info, text=_fmt_size(fi.size), bg=bg, anchor='w',
+                 font=('Segoe UI', 8), fg='#555555').pack(anchor='w')
+        short = _short_path(fi.path)
+        path_lbl = tk.Label(info, text=short, bg=bg, anchor='w',
+                             font=('Segoe UI', 7), fg='#999999')
+        path_lbl.pack(anchor='w')
+        if short != fi.path:
+            Tooltip(path_lbl, fi.path)
+
+        # thumbnail async load
+        ref_idx = len(self._img_refs)
+        self._img_refs.append(None)
+        if fi.ext in scanner.IMAGE_EXTENSIONS:
+            threading.Thread(
+                target=self._load_thumb_async,
+                args=(fi.path, thumb_lbl, ref_idx),
+                daemon=True,
+            ).start()
+        else:
+            thumb_lbl.config(text='🎬', font=('Segoe UI', 16))
+
+    def _load_thumb_async(self, path: str, lbl: tk.Label, idx: int) -> None:
+        try:
+            from PIL import Image, ImageTk
+            img = Image.open(path)
+            img.thumbnail((THUMB_S, THUMB_S), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            self.after(0, self._apply_thumb, photo, lbl, idx)
+        except Exception:
+            pass
+
+    def _apply_thumb(self, photo, lbl: tk.Label, idx: int) -> None:
+        self._img_refs[idx] = photo
+        lbl.config(image=photo, text='')
+
+    def remove_file(self, fi: scanner.FileInfo) -> None:
+        frame = self._file_frames.pop(fi.path, None)
+        if frame:
+            frame.destroy()
+        if fi in self.group.files:
+            self.group.files.remove(fi)
+
+
+# ── GroupResultsPanel ─────────────────────────────────────────────────────────
+
+class GroupResultsPanel(ttk.Frame):
+    def __init__(self, parent, **kw):
+        super().__init__(parent, **kw)
+        self._all_groups: list = []
+        self._rows: list       = []
+        self._scan_done        = False
+        self._build()
+
+    def _build(self) -> None:
+        hdr = ttk.Frame(self)
+        hdr.pack(side='top', fill='x', padx=10, pady=(6, 2))
+        self._count_lbl = ttk.Label(hdr, text='', font=('Segoe UI', 9))
+        self._count_lbl.pack(side='left')
+
+        body = ttk.Frame(self)
+        body.pack(fill='both', expand=True)
+
+        self._canvas = tk.Canvas(body, highlightthickness=0, bg=BG_ODD)
+        sb = ttk.Scrollbar(body, orient='vertical', command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side='right', fill='y')
+        self._canvas.pack(side='left', fill='both', expand=True)
+
+        self._inner = tk.Frame(self._canvas, bg=BG_ODD)
+        self._win = self._canvas.create_window((0, 0), window=self._inner, anchor='nw')
+
+        self._inner.bind('<Configure>', lambda _: self._canvas.configure(
+            scrollregion=self._canvas.bbox('all')
+        ))
+        self._canvas.bind('<Configure>', lambda e: self._canvas.itemconfig(
+            self._win, width=e.width
+        ))
+        self._canvas.bind('<Enter>',
+            lambda _: self._canvas.bind_all('<MouseWheel>', self._on_wheel))
+        self._canvas.bind('<Leave>',
+            lambda _: self._canvas.unbind_all('<MouseWheel>'))
+
+        self._load_btn = tk.Button(
+            self._inner, text='', command=self._load_more,
+            bg='#4a90d9', fg='white',
+            activebackground='#357abd', activeforeground='white',
+            font=('Segoe UI', 10, 'bold'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=20, pady=10,
+        )
+
+    def _on_wheel(self, event) -> None:
+        self._canvas.yview_scroll(int(-1 * event.delta / 120), 'units')
+
+    def add_group(self, group: scanner.DuplicateGroup) -> None:
+        self._all_groups.append(group)
+        if len(self._rows) < PAGE_SIZE:
+            self._render_one(group)
+        self._refresh()
+
+    def mark_scan_done(self) -> None:
+        self._scan_done = True
+        self._refresh()
+
+    def clear(self) -> None:
+        self._load_btn.pack_forget()
+        for row in self._rows:
+            row.destroy()
+        self._rows.clear()
+        self._all_groups.clear()
+        self._scan_done = False
+        self._refresh()
+
+    def set_header(self, text: str) -> None:
+        self._count_lbl.config(text=text)
+
+    def rebuild_rows(self) -> None:
+        shown = len(self._rows)
+        self._load_btn.pack_forget()
+        for row in self._rows:
+            row.destroy()
+        self._rows.clear()
+        for group in self._all_groups[:shown]:
+            self._render_one(group)
+        self._refresh()
+
+    def _render_one(self, group: scanner.DuplicateGroup) -> None:
+        self._load_btn.pack_forget()
+        row = GroupRow(self._inner, group, len(self._rows),
+                       on_delete=self._on_delete)
+        row.pack(fill='x', pady=(0, 2))
+        self._rows.append(row)
+
+    def _load_more(self) -> None:
+        start = len(self._rows)
+        end   = min(start + PAGE_SIZE, len(self._all_groups))
+        for i in range(start, end):
+            self._render_one(self._all_groups[i])
+        self._refresh()
+        self._canvas.yview_moveto(0.0)
+
+    def _on_delete(self, row: 'GroupRow', fi: scanner.FileInfo) -> None:
+        if not os.path.exists(fi.path):
+            self._remove_file(row, fi)
+            return
+        try:
+            recycler.send_to_trash(fi.path)
+            self._remove_file(row, fi)
+        except Exception as exc:
+            messagebox.showerror(
+                t('dlg_err_title'), t('dlg_err_msg', path=fi.path, exc=exc)
+            )
+
+    def _remove_file(self, row: 'GroupRow', fi: scanner.FileInfo) -> None:
+        row.remove_file(fi)
+        if len(row.group.files) < 2:
+            if row.group in self._all_groups:
+                self._all_groups.remove(row.group)
+            if row in self._rows:
+                self._rows.remove(row)
+            row.pack_forget()
+            row.destroy()
+            while len(self._rows) < PAGE_SIZE and len(self._rows) < len(self._all_groups):
+                self._render_one(self._all_groups[len(self._rows)])
+        self._refresh()
+
+    def _refresh(self) -> None:
+        shown  = len(self._rows)
+        total  = len(self._all_groups)
+        unseen = total - shown
+
+        if total == 0:
+            self._count_lbl.config(text=t('no_dupes'))
+        elif unseen > 0:
+            self._count_lbl.config(text=t('shown_of_grp', shown=shown, total=total))
+        else:
+            self._count_lbl.config(text=t('groups_count', n=total))
 
         self._load_btn.pack_forget()
         if unseen > 0 and self._scan_done:
@@ -541,6 +822,7 @@ class App:
         self._q: queue.Queue = queue.Queue()
         self._cancel = threading.Event()
         self._scanning = False
+        self._mode = tk.StringVar(value='two')
 
         self._build_ui()
         self._restore_folders()
@@ -552,6 +834,16 @@ class App:
 
         row1 = ttk.Frame(top)
         row1.pack(fill='x')
+
+        mode_frame = tk.Frame(row1, bg=self.root.cget('bg'))
+        mode_frame.pack(side='left', padx=(0, 10))
+        self._btn_two = self._mode_btn(
+            mode_frame, t('mode_two'), lambda: self._switch_mode('two'))
+        self._btn_two.pack(side='left')
+        self._btn_one = self._mode_btn(
+            mode_frame, t('mode_one'), lambda: self._switch_mode('one'))
+        self._btn_one.pack(side='left', padx=(2, 0))
+        self._update_mode_btns()
 
         self._pick_a = FolderPicker(row1, 'folder_a', on_change=self._save_prefs)
         self._pick_a.pack(side='left', fill='x', expand=True, padx=(0, 6))
@@ -598,10 +890,49 @@ class App:
         self._status_lbl = ttk.Label(prog_row, text='', width=40, anchor='e')
         self._status_lbl.pack(side='right', padx=(8, 0))
 
-        ttk.Separator(self.root).pack(fill='x')
+        self._sep = ttk.Separator(self.root)
+        self._sep.pack(fill='x')
 
         self._results = ResultsPanel(self.root)
         self._results.pack(fill='both', expand=True)
+        self._results_single = GroupResultsPanel(self.root)
+        # _results_single starts hidden; shown when mode == 'one'
+
+    @staticmethod
+    def _mode_btn(parent, text: str, cmd) -> tk.Button:
+        return tk.Button(
+            parent, text=text, command=cmd,
+            font=('Segoe UI', 8, 'bold'),
+            relief='flat', cursor='hand2', bd=0,
+            padx=8, pady=3,
+        )
+
+    def _update_mode_btns(self) -> None:
+        active   = dict(bg='#27ae60', fg='white',
+                        activebackground='#1e8449', activeforeground='white')
+        inactive = dict(bg='#dce1e7', fg='#555555',
+                        activebackground='#c8cfd8', activeforeground='#333333')
+        self._btn_two.config(**(active if self._mode.get() == 'two' else inactive))
+        self._btn_one.config(**(active if self._mode.get() == 'one' else inactive))
+
+    def _switch_mode(self, mode: str) -> None:
+        if mode == self._mode.get():
+            return
+        self._mode.set(mode)
+        self._update_mode_btns()
+        self._results.clear()
+        self._results_single.clear()
+        self._status_lbl.config(text='')
+        self._progress.config(value=0)
+        if mode == 'one':
+            self._pick_b.pack_forget()
+            self._results.pack_forget()
+            self._results_single.pack(fill='both', expand=True, after=self._sep)
+        else:
+            self._pick_b.pack(side='left', fill='x', expand=True,
+                              padx=(0, 10), after=self._pick_a)
+            self._results_single.pack_forget()
+            self._results.pack(fill='both', expand=True, after=self._sep)
 
     @staticmethod
     def _lang_btn(parent, text: str, cmd) -> tk.Button:
@@ -635,9 +966,12 @@ class App:
         self._radio_exact.config(text=t('exact_radio'))
         self._radio_perc.config(text=t('perceptual_radio'))
         self._recursive_chk.config(text=t('recursive_check'))
+        self._btn_two.config(text=t('mode_two'))
+        self._btn_one.config(text=t('mode_one'))
         if not self._scanning:
             self._scan_btn.config(text=t('find_btn'))
         self._results.rebuild_rows()
+        self._results_single.rebuild_rows()
 
     def _restore_folders(self) -> None:
         if _prefs_cache.get('folder_a') and os.path.isdir(_prefs_cache['folder_a']):
@@ -658,46 +992,74 @@ class App:
             self._scan_btn.config(state='disabled')
             return
 
-        a = self._pick_a.get()
-        b = self._pick_b.get()
+        a   = self._pick_a.get()
+        b   = self._pick_b.get()
+        one = self._mode.get() == 'one'
 
-        if not a or not b:
-            messagebox.showwarning(t('dlg_pick_title'), t('dlg_pick_msg'))
-            return
-        if not os.path.isdir(a):
-            messagebox.showwarning(t('dlg_dir_title'), t('dlg_dir_msg', path=a))
-            return
-        if not os.path.isdir(b):
-            messagebox.showwarning(t('dlg_dir_title'), t('dlg_dir_msg', path=b))
-            return
-        if os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b)):
-            messagebox.showwarning(t('dlg_same_title'), t('dlg_same_msg'))
-            return
+        if one:
+            if not a:
+                messagebox.showwarning(t('dlg_pick_title'), t('dlg_pick_msg'))
+                return
+            if not os.path.isdir(a):
+                messagebox.showwarning(t('dlg_dir_title'), t('dlg_dir_msg', path=a))
+                return
+        else:
+            if not a or not b:
+                messagebox.showwarning(t('dlg_pick_title'), t('dlg_pick_msg'))
+                return
+            if not os.path.isdir(a):
+                messagebox.showwarning(t('dlg_dir_title'), t('dlg_dir_msg', path=a))
+                return
+            if not os.path.isdir(b):
+                messagebox.showwarning(t('dlg_dir_title'), t('dlg_dir_msg', path=b))
+                return
+            if os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b)):
+                messagebox.showwarning(t('dlg_same_title'), t('dlg_same_msg'))
+                return
 
-        self._results.clear()
+        if one:
+            self._results_single.clear()
+        else:
+            self._results.clear()
         self._cancel.clear()
         self._scanning = True
         self._scan_btn.config(text=t('cancel_btn'))
         self._btn_en.config(state='disabled')
         self._btn_ru.config(state='disabled')
+        self._btn_two.config(state='disabled')
+        self._btn_one.config(state='disabled')
         self._progress.config(value=0)
         self._status_lbl.config(text='')
-        self._results.set_header(t('scanning'))
 
-        threading.Thread(
-            target=scanner.scan,
-            args=(a, b, self._strategy.get(),
-                  self._cb_progress, self._cb_result, self._cb_done,
-                  self._cancel),
-            kwargs={'recursive': self._recursive.get()},
-            daemon=True,
-        ).start()
+        if one:
+            self._results_single.set_header(t('scanning'))
+            threading.Thread(
+                target=scanner.scan_single,
+                args=(a, self._strategy.get(),
+                      self._cb_progress, self._cb_result_single, self._cb_done,
+                      self._cancel),
+                kwargs={'recursive': self._recursive.get()},
+                daemon=True,
+            ).start()
+        else:
+            self._results.set_header(t('scanning'))
+            threading.Thread(
+                target=scanner.scan,
+                args=(a, b, self._strategy.get(),
+                      self._cb_progress, self._cb_result, self._cb_done,
+                      self._cancel),
+                kwargs={'recursive': self._recursive.get()},
+                daemon=True,
+            ).start()
 
     def _cb_progress(self, done: int, total: int, name: str) -> None:
         self._q.put(('prog', done, total, name))
 
     def _cb_result(self, pair: scanner.DuplicatePair) -> None:
         self._q.put(('pair', pair))
+
+    def _cb_result_single(self, group: scanner.DuplicateGroup) -> None:
+        self._q.put(('group', group))
 
     def _cb_done(self, count: int) -> None:
         self._q.put(('done', count))
@@ -718,20 +1080,35 @@ class App:
                 elif kind == 'pair':
                     self._results.add_pair(msg[1])
 
+                elif kind == 'group':
+                    self._results_single.add_group(msg[1])
+
                 elif kind == 'done':
                     count = msg[1]
+                    one   = self._mode.get() == 'one'
                     self._scanning = False
                     self._scan_btn.config(text=t('find_btn'), state='normal')
                     self._btn_en.config(state='normal')
                     self._btn_ru.config(state='normal')
+                    self._btn_two.config(state='normal')
+                    self._btn_one.config(state='normal')
                     self._update_lang_btns()
+                    self._update_mode_btns()
                     self._progress.config(value=100 if count else 0)
-                    self._results.mark_scan_done()
-                    if count == 0:
-                        self._status_lbl.config(text=t('done_none'))
-                        self._results.set_header(t('no_dupes'))
+                    if one:
+                        self._results_single.mark_scan_done()
+                        if count == 0:
+                            self._status_lbl.config(text=t('done_none'))
+                            self._results_single.set_header(t('no_dupes'))
+                        else:
+                            self._status_lbl.config(text=t('done_groups', n=count))
                     else:
-                        self._status_lbl.config(text=t('done_found', n=count))
+                        self._results.mark_scan_done()
+                        if count == 0:
+                            self._status_lbl.config(text=t('done_none'))
+                            self._results.set_header(t('no_dupes'))
+                        else:
+                            self._status_lbl.config(text=t('done_found', n=count))
 
         except queue.Empty:
             pass

@@ -4,6 +4,9 @@ _state: dict = {'lang': 'en'}
 
 STRINGS: dict = {
     'ru': {
+        # mode
+        'mode_two':          'Две папки',
+        'mode_one':          'Одна папка',
         # toolbar
         'folder_a':          'Папка A',
         'folder_b':          'Папка B',
@@ -22,8 +25,15 @@ STRINGS: dict = {
         'load_more_btn':     '  Показать ещё {next_n}  (осталось {rem})  ',
         'done_none':         'Готово — дубликатов нет',
         'done_found':        'Готово — {n} пар',
+        'groups_count':      'Групп: {n}',
+        'shown_of_grp':      'Показано {shown} из {total} групп',
+        'done_groups':       'Готово — {n} групп',
+        'group_files':       '{n} файлов',
         'del_all_a':         'Удалить все из A',
         'del_all_b':         'Удалить все из B',
+        'scan_file_count':   'Файлов: {n}',
+        'scan_file_count2':  'Файлов: {a} + {b}',
+        'scan_comparing':    'Сравниваю изображения…',
         'dlg_del_all_title': 'Подтверждение',
         'dlg_del_all_msg':   'Переместить {n} файлов из Папки {which} в корзину?',
         # pair row
@@ -47,6 +57,9 @@ STRINGS: dict = {
         'dep_msg':           'Установи пакеты командой:\n\n    pip install {pkgs}\n\nДля режима «Визуальное сходство»:\n    pip install imagehash',
     },
     'en': {
+        # mode
+        'mode_two':          'Two folders',
+        'mode_one':          'One folder',
         # toolbar
         'folder_a':          'Folder A',
         'folder_b':          'Folder B',
@@ -65,8 +78,15 @@ STRINGS: dict = {
         'load_more_btn':     '  Show {next_n} more  ({rem} remaining)  ',
         'done_none':         'Done — no duplicates',
         'done_found':        'Done — {n} pairs',
+        'groups_count':      'Groups: {n}',
+        'shown_of_grp':      'Showing {shown} of {total} groups',
+        'done_groups':       'Done — {n} groups',
+        'group_files':       '{n} files',
         'del_all_a':         'Delete all from A',
         'del_all_b':         'Delete all from B',
+        'scan_file_count':   'Files: {n}',
+        'scan_file_count2':  'Files: {a} + {b}',
+        'scan_comparing':    'Comparing images…',
         'dlg_del_all_title': 'Confirm',
         'dlg_del_all_msg':   'Move {n} files from Folder {which} to Recycle Bin?',
         # pair row
